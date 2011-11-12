@@ -13,13 +13,22 @@ class PhotosController < ApplicationController
   def show
     @photo = Photo.find(params[:id])
     photo = "#{Rails.root}/public/uploads/foto.jpg"
-    url = "http://api.face.com/faces/detect.xml?api_key=e8b9c37170fb2b4a310e399d4bc03daf&api_secret=47a3d44bc3c1950de135cd1a8c9f4938&urls=#{photo}"
+
+    client = Face.get_client(:api_key => 'e8b9c37170fb2b4a310e399d4bc03daf', :api_secret => '47a3d44bc3c1950de135cd1a8c9f4938')
+    photos = client.faces_detect(:file => File.new(photo, 'rb'))['photos'][0]
+
+    url =  "http://api.face.com/faces/detect.xml?api_key=e8b9c37170fb2b4a310e399d4bc03daf&api_secret=47a3d44bc3c1950de135cd1a8c9f4938&urls=#{photos["url"]}&attributes=all&"
+
     puts url
+
     xml_data = Net::HTTP.get_response(URI.parse(url)).body
+
+    puts xml_data
 
     # extract event information
     doc = REXML::Document.new(xml_data)
 
+    attributes = photos['tags'][0]['attributes']
     gender = 'male'
 
     background = '15'
@@ -27,31 +36,43 @@ class PhotosController < ApplicationController
     mouth='49'
     legs = '06'
     head = '07'
+    mood_exp = ''
+
+    doc.elements.each('response/photos/photo/tags/tag/attributes/mood/value') do |mood|
+      if mood.text == 'surprised'
+        mood_exp = "OMG!"
+      elsif mood.text == 'sad'
+        mood_exp = "So Sad!"
+      elsif mood.text == 'happy'
+        mood_exp = 'Love this!'
+      elsif mood.text == 'neutral'
+        mood_exp = "Hi! I'm a bot!"
+      end
+    end
 
     male_smiling_mouth = '09'
     female_smiling_mouth = '47'
     glasses_eyes = '08'
+    
+    gender = attributes["gender"]["value"]
+    background = '02' if gender == 'female'
+    legs = '01' if gender == 'female'
+    head = '38' if gender == 'female'
 
-    doc.elements.each('response/photos/photo/tags/tag/attributes/gender/value') do |gender|
-      gender = gender.text
-      background = '02' if gender == 'female'
-      legs = '01' if gender == 'female'
-      head = '38' if gender == 'female'
+    glasses = attributes["glasses"]["value"]
+    eyes = '08' if glasses == 'true'
+
+    smiling = attributes["smiling"]["value"]
+    if smiling == 'true' 
+      mouth = male_smiling_mouth if gender == 'male'
+      mouth = female_smiling_mouth if gender == 'female'
     end
 
-    doc.elements.each('response/photos/photo/tags/tag/attributes/glasses/value') do |glasses|
-      eyes = '08' if glasses.text == 'true'
-    end
-
-    doc.elements.each('response/photos/photo/tags/tag/attributes/smiling/value') do |smiling|
-       
-      if smiling.text == 'true'
-        mouth = male_smiling_mouth if gender == 'male'
-        mouth = female_smiling_mouth if gender == 'female'
-      end
-    end
-
-    puts "https://services.sapo.pt/Codebits/botmake/01,#{background},03,#{eyes},#{mouth},#{legs},#{head},00,Generated!"
+    puts photos
+    
+    puts photos["url"]  
+    
+    @bot = "https://services.sapo.pt/Codebits/botmake/01,#{background},03,#{eyes},#{mouth},#{legs},#{head},00,#{mood_exp}"
   end
 
   def index
@@ -73,3 +94,4 @@ class PhotosController < ApplicationController
      "#{Rails.root}/public/uploads/foto.jpg"
   end
 end
+
